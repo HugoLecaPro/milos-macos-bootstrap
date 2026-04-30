@@ -25,6 +25,10 @@ log() {
   printf '%s\n' "$*"
 }
 
+tty_log() {
+  printf '%s\n' "$*" >/dev/tty
+}
+
 fail() {
   printf 'Error: %s\n' "$*" >&2
   exit 1
@@ -102,10 +106,10 @@ release_api_url() {
 }
 
 prompt_for_token() {
-  log "A GitHub fine-grained PAT is required to access private MILOS release assets."
-  log "Grant read access to repository contents for:"
-  log "  - $APP_REPO"
-  log "  - the private MILOS firmware repo"
+  tty_log "A GitHub fine-grained PAT is required to access private MILOS release assets."
+  tty_log "Grant read access to repository contents for:"
+  tty_log "  - $APP_REPO"
+  tty_log "  - the private MILOS firmware repo"
   printf 'GitHub PAT: ' >/dev/tty
   local token
   IFS= read -r -s token </dev/tty
