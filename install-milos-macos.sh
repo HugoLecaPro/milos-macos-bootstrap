@@ -59,6 +59,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 require_cmd curl
+require_cmd base64
 require_cmd ditto
 require_cmd git
 require_cmd security
@@ -150,10 +151,15 @@ download_asset() {
     -o "$output"
 }
 
+git_auth_header() {
+  local token="$1"
+  printf 'x-access-token:%s' "$token" | base64 | tr -d '\n'
+}
+
 git_with_auth() {
   local token="$1"
   shift
-  git -c http.extraHeader="Authorization: Bearer $token" "$@"
+  git -c http.extraHeader="Authorization: Basic $(git_auth_header "$token")" "$@"
 }
 
 write_runtime_config() {
@@ -190,15 +196,21 @@ sync_firmware_repo() {
   mkdir -p "$(dirname "$firmware_root")"
 
   if [ -d "$firmware_root/.git" ]; then
-    log "Updating managed firmware checkout..."
-    git_with_auth "$token" -C "$firmware_root" fetch --tags --force origin
+    log "Updating managed firmware checkout..." >&2
+    if ! git_with_auth "$token" -C "$firmware_root" fetch --tags --force origin; then
+      fail "Failed to fetch managed firmware checkout."
+    fi
   else
-    log "Cloning managed firmware checkout..."
-    git_with_auth "$token" clone "$repo_url" "$firmware_root"
+    log "Cloning managed firmware checkout..." >&2
+    if ! git_with_auth "$token" clone "$repo_url" "$firmware_root"; then
+      fail "Failed to clone managed firmware checkout."
+    fi
   fi
 
   git -C "$firmware_root" config advice.detachedHead false
-  git -C "$firmware_root" checkout --force "$revision"
+  if ! git -C "$firmware_root" checkout --force "$revision"; then
+    fail "Failed to checkout firmware revision: $revision"
+  fi
   mirror_workspace_calibrations "$firmware_root"
   printf '%s' "$firmware_root"
 }
@@ -238,7 +250,7 @@ main() {
 
   local temp_dir
   temp_dir="$(mktemp -d)"
-  trap 'rm -rf "$temp_dir"' EXIT
+  trap 'rm -rf "${temp_dir:-}"' EXIT
 
   local release_json="$temp_dir/release.json"
   log "Fetching release metadata..."
